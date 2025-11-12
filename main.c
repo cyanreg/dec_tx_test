@@ -33,11 +33,6 @@
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 
-const enum AVPixelFormat remap_fmts[] = {
-    [AV_PIX_FMT_GBRP10] = AV_PIX_FMT_GBRP10MSB,
-    [AV_PIX_FMT_GBRP12] = AV_PIX_FMT_GBRP12MSB,
-};
-
 static int decode_frame(AVCodecContext *dec, const AVPacket *pkt, AVFrame *frame)
 {
     int ret = 0;
@@ -150,8 +145,7 @@ int main(int argc, const char **argv)
 
         AVHWFramesContext *hwfc = (AVHWFramesContext *)hwfc_ref->data;
         hwfc->format = AV_PIX_FMT_VULKAN;
-        hwfc->sw_format = remap_fmts[in_avctx->pix_fmt] ?
-                          remap_fmts[in_avctx->pix_fmt] : in_avctx->pix_fmt;
+        hwfc->sw_format = in_avctx->pix_fmt;
         hwfc->width  = in_avctx->width;
         hwfc->height = in_avctx->height;
 
