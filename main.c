@@ -90,13 +90,13 @@ int main(int argc, const char **argv)
 
     AVBufferRef *hw_dev_ref;
     err = av_hwdevice_ctx_create(&hw_dev_ref, AV_HWDEVICE_TYPE_VULKAN,
-                                 "0", NULL, 0);
+                                 argv[2], NULL, 0);
     if (err < 0) {
         printf("Error creating device\n");
         return AVERROR(err);
     }
 
-    if (!strcmp(argv[2], "1"))
+    if (!strcmp(argv[3], "1"))
         in_avctx->hw_device_ctx = hw_dev_ref;
 
     err = avcodec_open2(in_avctx, in_dec, NULL);
