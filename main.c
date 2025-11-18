@@ -162,7 +162,7 @@ int main(int argc, const char **argv)
 
         AVHWFramesContext *hwfc = (AVHWFramesContext *)hwfc_ref->data;
         hwfc->format = AV_PIX_FMT_VULKAN;
-        hwfc->sw_format = in_avctx->pix_fmt;
+        hwfc->sw_format = remap_pixfmt(in_avctx->pix_fmt);
         hwfc->width  = in_avctx->width;
         hwfc->height = in_avctx->height;
 
