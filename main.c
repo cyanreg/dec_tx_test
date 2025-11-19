@@ -60,6 +60,8 @@ static int decode_frame(AVCodecContext *dec, const AVPacket *pkt, AVFrame *frame
 static enum AVPixelFormat remap_pixfmt(enum AVPixelFormat fmt)
 {
     switch (fmt) {
+    case AV_PIX_FMT_YUV420P:
+        return AV_PIX_FMT_NV12;
     case AV_PIX_FMT_GBRAP16:
         return AV_PIX_FMT_RGBA64;
     case AV_PIX_FMT_RGB48LE:
@@ -77,6 +79,7 @@ static enum AVPixelFormat remap_pixfmt(enum AVPixelFormat fmt)
 int main(int argc, const char **argv)
 {
     int err;
+//    av_log_set_level(AV_LOG_TRACE);
 
     AVFormatContext *in_ctx = avformat_alloc_context();
     err = avformat_open_input(&in_ctx, argv[1], NULL, NULL);
@@ -95,13 +98,13 @@ int main(int argc, const char **argv)
 
     AVCodecContext *in_avctx = avcodec_alloc_context3(in_dec);
     if (err < 0) {
-        printf("Error opening decoder\n");
+        printf("Error opening decoder: %s\n", av_err2str(err));
         return AVERROR(err);
     }
 
     err = avcodec_parameters_to_context(in_avctx, in_ctx->streams[sid]->codecpar);
     if (err < 0) {
-        printf("Error using codec parameters\n");
+        printf("Error using codec parameters: %s\n", av_err2str(err));
         return AVERROR(err);
     }
 
@@ -109,7 +112,7 @@ int main(int argc, const char **argv)
     err = av_hwdevice_ctx_create(&hw_dev_ref, AV_HWDEVICE_TYPE_VULKAN,
                                  argv[2], NULL, 0);
     if (err < 0) {
-        printf("Error creating device\n");
+        printf("Error creating device: %s\n", av_err2str(err));
         return AVERROR(err);
     }
 
@@ -118,7 +121,7 @@ int main(int argc, const char **argv)
 
     err = avcodec_open2(in_avctx, in_dec, NULL);
     if (err < 0) {
-        printf("Error opening decoder\n");
+        printf("Error opening decoder: %s\n", av_err2str(err));
         return AVERROR(err);
     }
 
@@ -130,26 +133,20 @@ int main(int argc, const char **argv)
 
     err = av_read_frame(in_ctx, pkt);
     if (err < 0) {
-        printf("Error reading packet\n");
+        printf("Error reading packet: %s\n", av_err2str(err));
         return AVERROR(err);
     }
 
-    AVFrame *frame = av_frame_alloc();
-    if (!pkt)
-        return ENOMEM;
-
-    AVFrame *hw_frame = av_frame_alloc();
-    if (!pkt)
-        return ENOMEM;
-
     /* Probe */
+    AVFrame *frame = av_frame_alloc();
     err = decode_frame(in_avctx, pkt, frame);
     if (err < 0) {
-        printf("Error decoding frame\n");
+        printf("Error decoding frame: %s\n", av_err2str(err));
         return AVERROR(err);
     }
     av_frame_unref(frame);
 
+    /* Frame context */
     AVBufferRef *hwfc_ref = NULL;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(in_avctx->pix_fmt);
     if (!(desc->flags & AV_PIX_FMT_FLAG_HWACCEL)) {
@@ -168,31 +165,92 @@ int main(int argc, const char **argv)
 
         err = av_hwframe_ctx_init(hwfc_ref);
         if (err < 0) {
-            printf("Error creating frames context\n");
+            printf("Error creating frames context: %s\n", av_err2str(err));
             return AVERROR(err);
         }
     } else {
         printf("Hardware decoding\n");
+        hwfc_ref = in_avctx->hw_frames_ctx;
+    }
+
+    /* Encoder */
+    const AVCodec *out_enc = avcodec_find_encoder_by_name("ffv1_vulkan");
+    AVCodecContext *out_avctx = avcodec_alloc_context3(out_enc);
+    if (err < 0) {
+        printf("Error opening encoder\n");
+        return AVERROR(err);
+    }
+
+    out_avctx->time_base = av_make_q(1, 1);
+    out_avctx->width = in_avctx->width;
+    out_avctx->height = in_avctx->height;
+    out_avctx->sw_pix_fmt = remap_pixfmt(in_avctx->sw_pix_fmt);
+    out_avctx->pix_fmt = AV_PIX_FMT_VULKAN;
+    out_avctx->hw_frames_ctx = hwfc_ref;
+    out_avctx->hw_device_ctx = hw_dev_ref;
+
+    AVDictionary *opts = NULL;
+    av_dict_set(&opts, "level", "4", 0);
+    av_dict_set(&opts, "strict", "-2", 0);
+    av_dict_set(&opts, "async_depth", "1", 0);
+    err = avcodec_open2(out_avctx, out_enc, &opts);
+    if (err < 0) {
+        printf("Error initializing encoder: %s\n", av_err2str(err));
+        return AVERROR(err);
     }
 
     int max_frames = 1000;
     int64_t time_start = av_gettime();
 
-    printf("Decoding %i frames\n", max_frames);
+    AVPacket *out_pkt = av_packet_alloc();
+    AVFrame *hw_frame = av_frame_alloc();
+
+    printf("Decoding and encoding %i frames\n", max_frames);
     for (int i = 0; i < max_frames; i++) {
         err = decode_frame(in_avctx, pkt, frame);
         if (err < 0) {
-            printf("Error decoding frame\n");
+            printf("Error decoding frame: %s\n", av_err2str(err));
+            return AVERROR(err);
+        }
+        printf("WHAT THE FUCK = %p\n", frame->buf[0]);
+
+        AVFrame *src = frame;
+        if (!(desc->flags & AV_PIX_FMT_FLAG_HWACCEL)) {
+            err = av_hwframe_get_buffer(hwfc_ref, hw_frame, 0);
+            if (err < 0) {
+                printf("Error allocating hardware frame\n");
+                return AVERROR(err);
+            }
+
+            err = av_hwframe_transfer_data(hw_frame, frame, 0);
+            if (err < 0) {
+                printf("Error uploading frame: %s\n", av_err2str(err));
+                return AVERROR(err);
+            }
+            src = hw_frame;
+        }
+
+
+
+        err = avcodec_send_frame(out_avctx, src);
+        if (err < 0) {
+            printf("Error sending frame for encoding: %s\n", av_err2str(err));
             return AVERROR(err);
         }
 
-        if (hwfc_ref)
-            av_hwframe_transfer_data(hw_frame, frame, 0);
+        avcodec_receive_packet(out_avctx, out_pkt);
+        if (err < 0) {
+            printf("Error receiving encoded packet: %s\n", av_err2str(err));
+            return AVERROR(err);
+        }
 
-        printf("\rFrame decoded: %i, fmt: %i", i + 1, in_avctx->pix_fmt);
+        /* Final */
+        printf("\rFrames done: %i, fmt: %i", i + 1, in_avctx->pix_fmt);
         fflush(stdout);
 
+        av_frame_unref(hw_frame);
         av_frame_unref(frame);
+        av_packet_unref(out_pkt);
     }
     printf("\n");
     int64_t time = av_gettime() - time_start;
