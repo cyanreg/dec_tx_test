@@ -69,7 +69,7 @@ static enum AVPixelFormat remap_pixfmt(enum AVPixelFormat fmt)
 int main(int argc, const char **argv)
 {
     int err;
-//    av_log_set_level(AV_LOG_TRACE);
+    av_log_set_level(AV_LOG_TRACE);
 
     AVFormatContext *in_ctx = avformat_alloc_context();
     err = avformat_open_input(&in_ctx, argv[1], NULL, NULL);
@@ -182,7 +182,7 @@ int main(int argc, const char **argv)
     AVDictionary *opts = NULL;
     av_dict_set(&opts, "level", "4", 0);
     av_dict_set(&opts, "strict", "-2", 0);
-    av_dict_set(&opts, "async_depth", "1", 0);
+    av_dict_set(&opts, "async_depth", "4", 0);
     err = avcodec_open2(out_avctx, out_enc, &opts);
     if (err < 0) {
         printf("Error initializing encoder: %s\n", av_err2str(err));
@@ -197,6 +197,8 @@ int main(int argc, const char **argv)
     AVFrame *temp = av_frame_alloc();
 
     SwsContext *swc = sws_alloc_context();
+
+    av_log_set_level(AV_LOG_INFO);
 
     if (argc > 4 && !strcmp(argv[4], "1"))
         printf("Decoding and encoding %i frames\n", max_frames);
@@ -247,7 +249,7 @@ int main(int argc, const char **argv)
             src = hw_frame;
         }
 
-        if (argc > 4 && !strcmp(argv[4], "1")) {
+        if (argc > 3 && !strcmp(argv[4], "1")) {
             err = avcodec_send_frame(out_avctx, src);
             if (err < 0) {
                 printf("Error sending frame for encoding: %s\n", av_err2str(err));
