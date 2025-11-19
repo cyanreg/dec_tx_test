@@ -32,6 +32,7 @@
 #include <libavutil/hwcontext.h>
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
+#include <libswscale/swscale.h>
 
 static int decode_frame(AVCodecContext *dec, const AVPacket *pkt, AVFrame *frame)
 {
@@ -39,21 +40,12 @@ static int decode_frame(AVCodecContext *dec, const AVPacket *pkt, AVFrame *frame
 
     ret = avcodec_send_packet(dec, pkt);
     if (ret < 0) {
-        fprintf(stderr, "Error submitting a packet for decoding (%s)\n", av_err2str(ret));
+        fprintf(stderr, "Error submitting a packet for decoding (%s)\n",
+                av_err2str(ret));
         return ret;
     }
 
-    while (ret >= 0) {
-        ret = avcodec_receive_frame(dec, frame);
-        if (ret < 0) {
-            if (ret == AVERROR_EOF || ret == AVERROR(EAGAIN))
-                return 0;
-
-            fprintf(stderr, "Error during decoding (%s)\n", av_err2str(ret));
-            return ret;
-        }
-    }
-
+    ret = avcodec_receive_frame(dec, frame);
     return ret;
 }
 
@@ -67,8 +59,6 @@ static enum AVPixelFormat remap_pixfmt(enum AVPixelFormat fmt)
     case AV_PIX_FMT_RGB48LE:
     case AV_PIX_FMT_RGB48BE:
         return AV_PIX_FMT_GBRP16;
-    case AV_PIX_FMT_GBRP10:
-        return AV_PIX_FMT_X2BGR10;
     case AV_PIX_FMT_BGR0:
         return AV_PIX_FMT_RGB0;
     default:
@@ -204,8 +194,15 @@ int main(int argc, const char **argv)
 
     AVPacket *out_pkt = av_packet_alloc();
     AVFrame *hw_frame = av_frame_alloc();
+    AVFrame *temp = av_frame_alloc();
 
-    printf("Decoding and encoding %i frames\n", max_frames);
+    SwsContext *swc = sws_alloc_context();
+
+    if (argc > 4 && !strcmp(argv[4], "1"))
+        printf("Decoding and encoding %i frames\n", max_frames);
+    else
+        printf("Decoding %i frames\n", max_frames);
+
     for (int i = 0; i < max_frames; i++) {
         err = decode_frame(in_avctx, pkt, frame);
         if (err < 0) {
@@ -213,10 +210,28 @@ int main(int argc, const char **argv)
             return AVERROR(err);
         }
 
-        frame->width = hw_frame->width = in_avctx->width;
-        frame->height = hw_frame->height = in_avctx->height;
-
         AVFrame *src = frame;
+        if (!frame->hw_frames_ctx &&
+            frame->format != remap_pixfmt(in_avctx->sw_pix_fmt)) {
+            temp->width = frame->width;
+            temp->height = frame->height;
+            temp->format = remap_pixfmt(in_avctx->sw_pix_fmt);
+
+            err = av_frame_get_buffer(temp, 0);
+            if (err < 0) {
+                printf("Error allocating temporary frame: %s\n", av_err2str(err));
+                return AVERROR(err);
+            }
+
+            err = sws_scale_frame(swc, temp, frame);
+            if (err < 0) {
+                printf("Error scaling frame: %s\n", av_err2str(err));
+                return AVERROR(err);
+            }
+
+            src = temp;
+        }
+
         if (!(desc->flags & AV_PIX_FMT_FLAG_HWACCEL)) {
             err = av_hwframe_get_buffer(hwfc_ref, hw_frame, 0);
             if (err < 0) {
@@ -224,7 +239,7 @@ int main(int argc, const char **argv)
                 return AVERROR(err);
             }
 
-            err = av_hwframe_transfer_data(hw_frame, frame, 0);
+            err = av_hwframe_transfer_data(hw_frame, src, 0);
             if (err < 0) {
                 printf("Error uploading frame: %s\n", av_err2str(err));
                 return AVERROR(err);
@@ -232,25 +247,25 @@ int main(int argc, const char **argv)
             src = hw_frame;
         }
 
+        if (argc > 4 && !strcmp(argv[4], "1")) {
+            err = avcodec_send_frame(out_avctx, src);
+            if (err < 0) {
+                printf("Error sending frame for encoding: %s\n", av_err2str(err));
+                return AVERROR(err);
+            }
 
-        #if 0
-        err = avcodec_send_frame(out_avctx, src);
-        if (err < 0) {
-            printf("Error sending frame for encoding: %s\n", av_err2str(err));
-            return AVERROR(err);
+            avcodec_receive_packet(out_avctx, out_pkt);
+            if (err < 0) {
+                printf("Error receiving encoded packet: %s\n", av_err2str(err));
+                return AVERROR(err);
+            }
         }
-
-        avcodec_receive_packet(out_avctx, out_pkt);
-        if (err < 0) {
-            printf("Error receiving encoded packet: %s\n", av_err2str(err));
-            return AVERROR(err);
-        }
-        #endif
 
         /* Final */
         printf("\rFrames done: %i, fmt: %i", i + 1, in_avctx->pix_fmt);
         fflush(stdout);
 
+        av_frame_unref(temp);
         av_frame_unref(hw_frame);
         av_frame_unref(frame);
         av_packet_unref(out_pkt);
