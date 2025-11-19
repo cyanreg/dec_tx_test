@@ -171,12 +171,6 @@ int main(int argc, const char **argv)
             printf("Error creating frames context\n");
             return AVERROR(err);
         }
-
-        err = av_hwframe_get_buffer(hwfc_ref, hw_frame, 0);
-        if (err < 0) {
-            printf("Error allocating hardware frame\n");
-            return AVERROR(err);
-        }
     } else {
         printf("Hardware decoding\n");
     }
