@@ -212,7 +212,9 @@ int main(int argc, const char **argv)
             printf("Error decoding frame: %s\n", av_err2str(err));
             return AVERROR(err);
         }
-        printf("WHAT THE FUCK = %p\n", frame->buf[0]);
+
+        frame->width = hw_frame->width = in_avctx->width;
+        frame->height = hw_frame->height = in_avctx->height;
 
         AVFrame *src = frame;
         if (!(desc->flags & AV_PIX_FMT_FLAG_HWACCEL)) {
@@ -231,7 +233,7 @@ int main(int argc, const char **argv)
         }
 
 
-
+        #if 0
         err = avcodec_send_frame(out_avctx, src);
         if (err < 0) {
             printf("Error sending frame for encoding: %s\n", av_err2str(err));
@@ -243,6 +245,7 @@ int main(int argc, const char **argv)
             printf("Error receiving encoded packet: %s\n", av_err2str(err));
             return AVERROR(err);
         }
+        #endif
 
         /* Final */
         printf("\rFrames done: %i, fmt: %i", i + 1, in_avctx->pix_fmt);
