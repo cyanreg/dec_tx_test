@@ -182,7 +182,7 @@ int main(int argc, const char **argv)
     AVDictionary *opts = NULL;
     av_dict_set(&opts, "level", "3", 0);
 //    av_dict_set(&opts, "strict", "-2", 0);
-    av_dict_set(&opts, "async_depth", "4", 0);
+    av_dict_set(&opts, "async_depth", "3", 0);
     err = avcodec_open2(out_avctx, out_enc, &opts);
     if (err < 0) {
         printf("Error initializing encoder: %s\n", av_err2str(err));
@@ -266,7 +266,7 @@ int main(int argc, const char **argv)
 
         time = av_gettime() - time_start;
         printf("\rFrames done: %i, fmt: %i, fps: %f", i + 1, in_avctx->pix_fmt,
-               (float)i / (float)time/(1000.0f*1000.0f));
+               (float)i / ((float)time/(1000.0f*1000.0f)));
         fflush(stdout);
 
         av_frame_unref(temp);
@@ -277,5 +277,5 @@ int main(int argc, const char **argv)
     printf("\n");
     time = av_gettime() - time_start;
     printf("Time = %f; fps = %f\n", (float)time/(1000.0f*1000.0f),
-           (float)max_frames / (float)time/(1000.0*1000.0f));
+           (float)max_frames / ((float)time/(1000.0*1000.0f)));
 }
