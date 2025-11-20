@@ -251,17 +251,20 @@ int main(int argc, const char **argv)
         }
 
         if (argc > 3 && !strcmp(argv[4], "1")) {
+again:
             err = avcodec_send_frame(out_avctx, src);
-            if (err < 0) {
+            if (err < 0 && err != AVERROR(EAGAIN)) {
                 printf("Error sending frame for encoding: %s\n", av_err2str(err));
                 return AVERROR(err);
             }
 
-            avcodec_receive_packet(out_avctx, out_pkt);
-            if (err < 0) {
+            err = avcodec_receive_packet(out_avctx, out_pkt);
+            if (err < 0 && err != AVERROR(EAGAIN)) {
                 printf("Error receiving encoded packet: %s\n", av_err2str(err));
                 return AVERROR(err);
             }
+            if (err == AVERROR(EAGAIN))
+                goto again;
         }
 
         time = av_gettime() - time_start;
