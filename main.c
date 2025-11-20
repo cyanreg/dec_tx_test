@@ -56,6 +56,8 @@ static enum AVPixelFormat remap_pixfmt(enum AVPixelFormat fmt)
         return AV_PIX_FMT_NV12;
     case AV_PIX_FMT_GBRAP16:
         return AV_PIX_FMT_RGBA64;
+    case AV_PIX_FMT_GBRP10:
+        return AV_PIX_FMT_X2BGR10;
     case AV_PIX_FMT_RGB48LE:
     case AV_PIX_FMT_RGB48BE:
         return AV_PIX_FMT_GBRP16;
