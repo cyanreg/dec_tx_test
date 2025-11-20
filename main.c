@@ -69,7 +69,7 @@ static enum AVPixelFormat remap_pixfmt(enum AVPixelFormat fmt)
 int main(int argc, const char **argv)
 {
     int err;
-    av_log_set_level(AV_LOG_TRACE);
+    av_log_set_level(AV_LOG_VERBOSE);
 
     AVFormatContext *in_ctx = avformat_alloc_context();
     err = avformat_open_input(&in_ctx, argv[1], NULL, NULL);
