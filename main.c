@@ -266,7 +266,7 @@ int main(int argc, const char **argv)
 
         time = av_gettime() - time_start;
         printf("\rFrames done: %i, fmt: %i, fps: %f", i + 1, in_avctx->pix_fmt,
-               i / (double)time/(1000.0*1000.0));
+               (float)i / (float)time/(1000.0f*1000.0f));
         fflush(stdout);
 
         av_frame_unref(temp);
@@ -276,6 +276,6 @@ int main(int argc, const char **argv)
     }
     printf("\n");
     time = av_gettime() - time_start;
-    printf("Time = %f; fps = %f\n", (double)time/(1000.0*1000.0),
-           max_frames / (double)time/(1000.0*1000.0));
+    printf("Time = %f; fps = %f\n", (float)time/(1000.0f*1000.0f),
+           (float)max_frames / (float)time/(1000.0*1000.0f));
 }
