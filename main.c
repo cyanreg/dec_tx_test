@@ -180,8 +180,8 @@ int main(int argc, const char **argv)
     out_avctx->hw_device_ctx = hw_dev_ref;
 
     AVDictionary *opts = NULL;
-    av_dict_set(&opts, "level", "4", 0);
-    av_dict_set(&opts, "strict", "-2", 0);
+    av_dict_set(&opts, "level", "3", 0);
+//    av_dict_set(&opts, "strict", "-2", 0);
     av_dict_set(&opts, "async_depth", "4", 0);
     err = avcodec_open2(out_avctx, out_enc, &opts);
     if (err < 0) {
@@ -191,6 +191,7 @@ int main(int argc, const char **argv)
 
     int max_frames = 1000;
     int64_t time_start = av_gettime();
+    int64_t time;
 
     AVPacket *out_pkt = av_packet_alloc();
     AVFrame *hw_frame = av_frame_alloc();
@@ -263,8 +264,9 @@ int main(int argc, const char **argv)
             }
         }
 
-        /* Final */
-        printf("\rFrames done: %i, fmt: %i", i + 1, in_avctx->pix_fmt);
+        time = av_gettime() - time_start;
+        printf("\rFrames done: %i, fmt: %i, fps: %f", i + 1, in_avctx->pix_fmt,
+               i / (double)time/(1000.0*1000.0));
         fflush(stdout);
 
         av_frame_unref(temp);
@@ -273,6 +275,7 @@ int main(int argc, const char **argv)
         av_packet_unref(out_pkt);
     }
     printf("\n");
-    int64_t time = av_gettime() - time_start;
-    printf("Time = %f\n", (double)time/(1000.0*1000.0));
+    time = av_gettime() - time_start;
+    printf("Time = %f; fps = %f\n", (double)time/(1000.0*1000.0),
+           max_frames / (double)time/(1000.0*1000.0));
 }
